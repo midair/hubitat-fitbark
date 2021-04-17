@@ -149,6 +149,12 @@ According to [this answer](https://www.fitbark.com/articles/how-often-does-the-f
 FitBark GPS devices try to sync once per minute when connected to your phone over BLE – versus once
 per hour when only a Wi-Fi connection is available.
 
+> ➟ If you don't like the idea of having any polling, no matter the interval, you have the option
+> to set the device polling interval preference to `Never (Disable Automatic Device Updates)`.
+>
+> The device attributes would no longer be useful automation *triggers*, but you could still trigger
+> the `refresh` command from other automation routines to access up-to-date device data.
+
 ### Battery Capability
 
 The [Battery Capability](https://docs.hubitat.com/index.php?title=Driver_Capability_List#Battery)
@@ -182,8 +188,8 @@ The
 Any suggestions, questions, issues, or improvements are welcome!
 
 You may also want to check out the
- [FitBark API documentation](https://www.fitbark.com/dev/) in case you'd like to request one of the
- attributes that wasn't included.
+[FitBark API documentation](https://www.fitbark.com/dev/) in case you'd like to request one of the
+attributes that wasn't included.
 
 ---
 

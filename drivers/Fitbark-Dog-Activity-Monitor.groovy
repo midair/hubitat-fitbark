@@ -137,34 +137,25 @@ metadata {
         type: "enum",
         title: "Minimum Device Log Level to Output",
         options: [
-            "${LOG_LEVEL_ERROR + 1} – NO LOGS",
-            "${LOG_LEVEL_ERROR} – ERROR",
-            "${LOG_LEVEL_WARN} – WARN",
-            "${LOG_LEVEL_INFO} – INFO",
-            "${LOG_LEVEL_DEBUG} – DEBUG",
-            "${LOG_LEVEL_TRACE} – TRACE (ALL LOGS)"
+            "${LOG_LEVEL.ERROR + 1} – NO LOGS",
+            "${LOG_LEVEL.ERROR} – ERROR",
+            "${LOG_LEVEL.WARN} – WARN",
+            "${LOG_LEVEL.INFO} – INFO",
+            "${LOG_LEVEL.DEBUG} – DEBUG",
+            "${LOG_LEVEL.TRACE} – TRACE [ALL LOGS]"
         ],
-        defaultValue: "${LOG_LEVEL_INFO} – INFO",
+        defaultValue: "${LOG_LEVEL.INFO} – INFO",
         required: true,
         submitOnChange: true
     )
     input(
         name: "fitBarkDevicePollingInterval",
         type: "enum",
-        title: "Desired Interval Between Each FitBark Refresh Request",
-        options: [
-            "Every Minute [Not Recommended]",
-            "Every Five Minutes",
-            "Every Ten Minutes",
-            "Every Fifteen Minutes",
-            "Every Thirty Minutes",
-            "Every Hour",
-            "Every Three Hours",
-            "Never (Disable Device Updates)"
-        ],
+        title: "Polling Interval Between FitBark Data Refresh Requests",
+        description: "<i>⚠️ Frequent polling may cause issues with your hub.</i>",
+        options: new ArrayList<String>(POLLING_INTERVAL_OPTIONS.values()),
         defaultValue: "Every Thirty Minutes",
-        required: true,
-        submitOnChange: true
+        required: true
     )
   }
 }
@@ -213,36 +204,36 @@ void initialize() {
 
   switch (selectedPollingInterval) {
 
-    case "Every Minute [Not Recommended]":
+    case POLLING_INTERVAL_OPTIONS.never:
+      // Already unscheduled polling above – return before scheduling the once-a-day jobs.
+      return
+
+    case POLLING_INTERVAL_OPTIONS.every1Minute:
       runEvery1Minute(poll)
       break
 
-    case "Every Five Minutes":
+    case POLLING_INTERVAL_OPTIONS.every5Minutes:
       runEvery5Minutes(poll)
       break
 
-    case "Every Ten Minutes":
+    case POLLING_INTERVAL_OPTIONS.every10Minutes:
       runEvery10Minutes(poll)
       break
 
-    case "Every Fifteen Minutes":
+    case POLLING_INTERVAL_OPTIONS.every15Minutes:
       runEvery15Minutes(poll)
       break
 
-    case "Every Thirty Minutes":
+    case POLLING_INTERVAL_OPTIONS.every30Minutes:
       runEvery30Minutes(poll)
       break
 
-    case "Every Hour":
+    case POLLING_INTERVAL_OPTIONS.every1Hour:
       runEvery1Hour(poll)
       break
 
-    case "Every Three Hours":
+    case POLLING_INTERVAL_OPTIONS.every3Hours:
       runEvery3Hours(poll)
-      break
-
-    case "Never (Disable Device Updates)":
-      // Already unscheduled polling above.
       break
 
     default:
@@ -251,9 +242,13 @@ void initialize() {
   }
 
   logInfo("Scheduling the once-daily refresh jobs.")
-  // Schedule the 'Daily Goal Updates' and 'Similar Dog Stats' to be updated just once daily.
-  schedule(new Date(), refreshDailyGoalUpdates)
-  schedule(new Date(), refreshSimilarDogStats)
+  // Schedule the 'Daily Goal Updates' and 'Similar Dog Stats' to be updated just once every day.
+  Date scheduleRefreshTime
+  use(groovy.time.TimeCategory) {
+    scheduleRefreshTime = 3.hours.from.now
+  }
+  schedule(scheduleRefreshTime, refreshDailyGoalUpdates)
+  schedule(scheduleRefreshTime, refreshSimilarDogStats)
 }
 
 /**
@@ -340,7 +335,7 @@ void scheduleDailyActivityGoalUpdate(BigDecimal newBarkPointsGoal, Date newGoalS
  * @param msg The message to log.
  */
 private void logError(String msg) {
-  if (shouldOutputLogForLevel(LOG_LEVEL_ERROR)) {
+  if (shouldOutputLogForLevel(LOG_LEVEL.ERROR)) {
     log.error msg
   }
 }
@@ -351,7 +346,7 @@ private void logError(String msg) {
  * @param msg The message to log.
  */
 private void logWarn(String msg) {
-  if (shouldOutputLogForLevel(LOG_LEVEL_WARN)) {
+  if (shouldOutputLogForLevel(LOG_LEVEL.WARN)) {
     log.warn msg
   }
 }
@@ -362,7 +357,7 @@ private void logWarn(String msg) {
  * @param msg The message to log.
  */
 private void logInfo(String msg) {
-  if (shouldOutputLogForLevel(LOG_LEVEL_INFO)) {
+  if (shouldOutputLogForLevel(LOG_LEVEL.INFO)) {
     log.info msg
   }
 }
@@ -373,7 +368,7 @@ private void logInfo(String msg) {
  * @param msg The message to log.
  */
 private void logDebug(String msg) {
-  if (shouldOutputLogForLevel(LOG_LEVEL_DEBUG)) {
+  if (shouldOutputLogForLevel(LOG_LEVEL.DEBUG)) {
     log.debug msg
   }
 }
@@ -384,7 +379,7 @@ private void logDebug(String msg) {
  * @param msg The message to log.
  */
 private void logTrace(String msg) {
-  if (shouldOutputLogForLevel(LOG_LEVEL_TRACE)) {
+  if (shouldOutputLogForLevel(LOG_LEVEL.TRACE)) {
     log.trace msg
   }
 }
@@ -396,7 +391,7 @@ private void logTrace(String msg) {
  */
 private boolean shouldOutputLogForLevel(Integer logLevel) {
   if (!settings?.minimumLogOutputLevel) {
-    return logLevel >= LOG_LEVEL_INFO  // Fall back to a minimum level of INFO.
+    return logLevel >= LOG_LEVEL.INFO  // Fall back to a minimum level of INFO.
   }
 
   Integer minimumLogLevel = settings.minimumLogOutputLevel.split(" ")[0].toInteger()
@@ -414,17 +409,24 @@ private boolean shouldOutputLogForLevel(Integer logLevel) {
 /** Namespace of this device driver – must align with the value used by the FitBark Hubitat App. */
 @Field static String FITBARK_GROOVY_NAMESPACE = "midair.fitbark"
 
-/** Integer representation of the ERROR log level (the highest level, meaning only ERROR logs will be output). */
-@Field static Integer LOG_LEVEL_ERROR = 4
+/** Integer representations of log levels. */
+@Field static Map LOG_LEVEL = [
+    ERROR: 4,
+    WARN: 3,
+    INFO: 2,
+    DEBUG: 1,
+    TRACE: 0
+]
 
-/** Integer representation of the WARN log level (at this level, the levels WARN/ERROR will be output). */
-@Field static Integer LOG_LEVEL_WARN = 3
+/** List of the display strings associated with the various polling interval options. */
+@Field static Map POLLING_INTERVAL_OPTIONS = [
+    never: "Never [Disable Automatic Device Updates]",
+    every1Minute: "Every Minute [Not Recommended]",
+    every5Minutes: "Every Five Minutes",
+    every10Minutes: "Every Ten Minutes",
+    every15Minutes: "Every Fifteen Minutes",
+    every30Minutes: "Every Thirty Minutes",
+    every1Hour: "Every Hour",
+    every3Hours: "Every Three Hours"
+]
 
-/** Integer representation of the INFO log level (at this level, the levels INFO/WARN/ERROR will be output). */
-@Field static Integer LOG_LEVEL_INFO = 2
-
-/** Integer representation of the DEBUG log level (at this level, the levels DEBUG/INFO/WARN/ERROR will be output). */
-@Field static Integer LOG_LEVEL_DEBUG = 1
-
-/** Integer representation of the TRACE log level (the lowest level, meaning ALL log levels will be output). */
-@Field static Integer LOG_LEVEL_TRACE = 0

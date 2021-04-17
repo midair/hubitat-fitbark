@@ -1526,7 +1526,7 @@ void handleGetSimilarDogStats(DeviceWrapper requestingDevice) {
   // 2. Send the HTTP POST request.
   Object similarDogsStatsResponse
   try {
-    logDebug("Sending a GET request to fetch Similar Dog Stats for ${deviceLabel}.")
+    logDebug("Sending a POST request to fetch Similar Dog Stats for ${deviceLabel}.")
     httpPost(getSimilarDogStatsHTTPParams) { response ->
       logTrace("getSimilarDogStats HTTP POST response: ${response}")
       similarDogsStatsResponse = response.getData().similar_dogs_stats
