@@ -1276,6 +1276,7 @@ void handleDiscoveredDogRelations(getLinkedDogsResponse, additionalData) {
 
     // Configure the other attributes which will be refreshed on a polling interval.
     configureDogMonitorAttributes(addedChildFitBarkDevice, dogRelationship.dog)
+    configureDogProfileAttributes(addedChildFitBarkDevice, dogRelationship.dog)
 
     state.deviceDiscovery.newlyDiscoveredCount += 1
   }
@@ -1319,7 +1320,7 @@ ChildDeviceWrapper addChildDogActivityMonitorDevice(LinkedHashMap<Object, Object
  * Configures the attributes of a linked FitBark Dog Activity Monitor to reflect the current device state.
  *
  * @param deviceToConfigure The Child Device whose attributes should be configured.
- * @param dogDetailsJSON The parsed JSON for a FitBark API 'dog' object that should has the current device values.
+ * @param dogDetailsJSON The parsed JSON for a FitBark API 'dog' object that should have the current device values.
  */
 void configureDogMonitorAttributes(DeviceWrapper deviceToConfigure, Object dogDetailsJSON) {
   logTrace("configureDogMonitorAttributes(dogDetailsJSON: ${dogDetailsJSON})")
@@ -1343,26 +1344,16 @@ void configureDogMonitorAttributes(DeviceWrapper deviceToConfigure, Object dogDe
   }
   deviceToConfigure.sendEvent([name: "percentageOfDailyGoalComplete", value: newDailyGoalPercentage, unit: "%"])
 
-  // => Update the average hourly activity.
+  // => Update the hourly average... something? Does not actually seem to be average activity points.
   if (dogDetailsJSON.hourly_average) {
-    deviceToConfigure.sendEvent([name: "hourlyAverageActivityPoints", value: dogDetailsJSON.hourly_average.toInteger()])
+    // TODO: Investigate what this value actually represents.
+    deviceToConfigure.sendEvent([name: "hourlyAverage", value: dogDetailsJSON.hourly_average.toInteger()])
   }
 
   // => Update the Play/Rest/Active Time Counters.
   deviceToConfigure.sendEvent([name: "minutesTodayPlayTime", value: dogDetailsJSON.min_play.toInteger(), unit: "minutes"])
   deviceToConfigure.sendEvent([name: "minutesTodayActiveTime", value: dogDetailsJSON.min_active.toInteger(), unit: "minutes"])
   deviceToConfigure.sendEvent([name: "minutesTodayRestTime", value: dogDetailsJSON.min_rest.toInteger(), unit: "minutes"])
-
-  // => Update the dog's name.
-  String dogNameValue = dogDetailsJSON.name ?: (deviceToConfigure.currentValue("dogName") ?: "Mystery Pup")
-  deviceToConfigure.sendEvent([name: "dogName", value: dogNameValue])
-
-  // => Update the dog's birthday.
-  if (dogDetailsJSON.birth) {
-    SimpleDateFormat birthdayFormatter = new SimpleDateFormat("yyyy-MM-dd")
-    Date birthdayDate = birthdayFormatter.parse(dogDetailsJSON.birth)
-    deviceToConfigure.sendEvent([name: "dogBirthday", value: birthdayDate])
-  }
 
   // => Update the time that the dog monitor's last synced to the FitBark servers.
   //
@@ -1375,11 +1366,63 @@ void configureDogMonitorAttributes(DeviceWrapper deviceToConfigure, Object dogDe
   }
 }
 
+
+/**
+ * Configures the attributes of a linked FitBark Dog profile to reflect the current state - only run once per day.
+ *
+ * @param deviceToConfigure The Child Device whose attributes should be configured.
+ * @param dogDetailsJSON The parsed JSON for a FitBark API 'dog' object that should have the current profile values.
+ */
+void configureDogProfileAttributes(DeviceWrapper deviceToConfigure, Object dogDetailsJSON) {
+  logTrace("configureDogProfileAttributes(dogDetailsJSON: ${dogDetailsJSON})")
+
+  // Only actually allow this method to run once per day during the normal polling updates, since these values won't be
+  // changing often.
+  Long nextUpdateInMsSinceEpoch = state.nextProfileUpdateTimes?.get(deviceToConfigure.getDeviceNetworkId())
+  if (nextUpdateInMsSinceEpoch > new Date().getTime()) {
+    logTrace("Not time to re-run configureDogProfileAttributes yet (nextUpdateTime: ${nextUpdateInMsSinceEpoch}).")
+    return
+  }
+  state.nextProfileUpdateTimes = state.nextProfileUpdateTimes ?: [:]
+  state.nextProfileUpdateTimes.put(deviceToConfigure.getDeviceNetworkId(), new Date().plus(1).getTime())
+
+  // => Update the dog's name.
+  String dogNameValue = dogDetailsJSON.name ?: (deviceToConfigure.currentValue("dogName") ?: "Mystery Pup")
+  deviceToConfigure.sendEvent([name: "dogName", value: dogNameValue])
+  logInfo("Configuring profile attributes for: ${dogNameValue}.")
+
+  // => Update the dog's weight.
+  Integer dogWeight = dogDetailsJSON.weight?.toInteger()
+  if (dogWeight) {
+    deviceToConfigure.sendEvent([name: "dogWeight", value: dogWeight, unit: dogDetailsJSON.weight_unit])
+  }
+
+  // => Update the dog's birthday.
+  if (dogDetailsJSON.birth) {
+    SimpleDateFormat birthdayFormatter = new SimpleDateFormat("yyyy-MM-dd")
+    Date birthdayDate = birthdayFormatter.parse(dogDetailsJSON.birth)
+    deviceToConfigure.sendEvent([name: "dogBirthday", value: birthdayDate])
+  }
+
+  // => Update the dog's breed.
+  if (dogDetailsJSON.breed1?.name) {
+    String dogBreed = dogDetailsJSON.breed1?.name
+    if (dogDetailsJSON.breed2?.name) {
+      dogBreed += " / " + dogDetailsJSON.breed2.name
+    }
+    deviceToConfigure.sendEvent([name: "dogBreed", value: dogBreed])
+  }
+}
+
+
 /**
  * Refreshes all linked FitBark Devices.
  */
 void refreshAllLinkedFitBarkDogMonitors() {
   logTrace("refreshAllLinkedFitBarkDogMonitors()")
+
+  // Clear out the last profile configuration time(s) to force a refresh.
+  state.nextProfileUpdateTimes = [:]
 
   List<ChildDeviceWrapper> linkedFitBarkDogMonitors = getChildDevices()
 
@@ -1442,6 +1485,7 @@ void handleDeviceRefresh(DeviceWrapper deviceToRefresh) {
     httpGet(getDogInfoHTTPParams) { response ->
       Object responseJSON = response.getData()
       configureDogMonitorAttributes(deviceToRefresh, responseJSON.dog)
+      configureDogProfileAttributes(deviceToRefresh, responseJSON.dog)
     }
   } catch (groovyx.net.http.HttpResponseException e) {
     logError("Get Dog Info request failed -- ${e.getLocalizedMessage()}: ${e.response.data}")

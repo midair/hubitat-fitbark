@@ -77,6 +77,10 @@ metadata {
     attribute "dogBirthday", "date"
     // ↳ Birthdate of the dog in its FitBark profile.
 
+    attribute "dogBreed", "string"
+    // ↳ Breed(s) of the dog in its FitBark profile.
+
+    attribute "dogWeight", "number"
     // ==== BarkPoints Tracking (Extends the Step Sensor) ====
 
     attribute "percentageOfDailyGoalComplete", "number"
@@ -89,8 +93,8 @@ metadata {
     // ↳ JSON Object returned from the FitBark API containing an array of the scheduled changes to the Daily Goal for
     // this device (or simply the current goal, if no changes are scheduled).
 
-    attribute "hourlyAverageActivityPoints", "number"
-    // ↳ Seems to be the average number of BarkPoints accrued per hour on that given day (?).
+    attribute "hourlyAverage", "number"
+    // ↳ Unclear, possible related to be the average number of BarkPoints accrued per hour on that given day?
 
     // ==== Activity Level Time Breakdown ====
 
@@ -242,13 +246,9 @@ void initialize() {
   }
 
   logInfo("Scheduling the once-daily refresh jobs.")
-  // Schedule the 'Daily Goal Updates' and 'Similar Dog Stats' to be updated just once every day.
-  Date scheduleRefreshTime
-  use(groovy.time.TimeCategory) {
-    scheduleRefreshTime = 3.hours.from.now
-  }
-  schedule(scheduleRefreshTime, refreshDailyGoalUpdates)
-  schedule(scheduleRefreshTime, refreshSimilarDogStats)
+  // Schedule the 'Daily Goal Updates' and 'Similar Dog Stats' run once now and then be updated just once every day.
+  schedule(new Date(), refreshDailyGoalUpdates)
+  schedule(new Date(), refreshSimilarDogStats)
 }
 
 /**
